@@ -16,11 +16,16 @@ from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from urllib.parse import urljoin
+from pathlib import Path
 
-PRODUCTS_FILE = "products.csv"
-OUTPUT_FILE = "price_history.csv"
-SEEN_ASINS_FILE = "seen_asins.json"
-PRODUCT_HISTORY_FILE = "asin_history.json"
+
+BASE_DIR = Path(__file__).resolve().parent
+
+PRODUCTS_FILE = BASE_DIR / "products.csv"
+OUTPUT_FILE = BASE_DIR / "price_history.csv"
+SEEN_ASINS_FILE = BASE_DIR / "seen_asins.json"
+PRODUCT_HISTORY_FILE = BASE_DIR / "asin_history.json"
+
 
 TIMEOUT = 20
 
@@ -617,19 +622,23 @@ def discover_products(session):
     return selected
 
 def save_products(products):
-    with open(PRODUCTS_FILE, "w", newline="", encoding="utf-8") as f:
+    PRODUCTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with PRODUCTS_FILE.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["asin", "name", "url"])
         writer.writeheader()
         for p in products:
             writer.writerow(p)
 
+    print(f"  Product list saved to: {PRODUCTS_FILE}")
+
 
 def load_products():
-    if not os.path.exists(PRODUCTS_FILE):
+    if not PRODUCTS_FILE.exists():
         return []
 
     products = []
-    with open(PRODUCTS_FILE, "r", newline="", encoding="utf-8") as f:
+    with PRODUCTS_FILE.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("url") and row.get("asin"):
@@ -642,14 +651,11 @@ def load_products():
     return products
 
 
-# ═════════════════════════════════════════════════════════════
-# SECTION 10 — SAVE RESULTS TO CSV
-# ═════════════════════════════════════════════════════════════
-
 def save_results(results):
-    file_exists = os.path.exists(OUTPUT_FILE)
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = OUTPUT_FILE.exists()
 
-    with open(OUTPUT_FILE, "a", newline="", encoding="utf-8") as f:
+    with OUTPUT_FILE.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
 
         if not file_exists:
@@ -658,16 +664,19 @@ def save_results(results):
         for row in results:
             writer.writerow(row)
 
-    with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
-        total_rows = sum(1 for _ in f) - 1
+    with OUTPUT_FILE.open("r", encoding="utf-8") as f:
+        total_rows = max(sum(1 for _ in f) - 1, 0)
 
     print(f"\n  Saved {len(results)} new rows to {OUTPUT_FILE}")
     print(f"  Total records in dataset: {total_rows}")
+
 
 def run_scraper():
     print("\n" + "=" * 60)
     print("  DealOrDud — Amazon Fake Discount Detector")
     print(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  Products file: {PRODUCTS_FILE}")
+    print(f"  Output file:   {OUTPUT_FILE}")
     print("=" * 60)
 
     session = build_session()
@@ -706,8 +715,12 @@ def run_scraper():
             time.sleep(wait)
 
     print("\n" + "-" * 60)
+    print(f"  Successful result rows collected: {len(results)}")
+
     if results:
         save_results(results)
+    else:
+        print("  No successful rows collected, so nothing was appended to price_history.csv")
 
     fake_count = sum(1 for r in results if r["fake_discount"])
     print(f"\n{'=' * 60}")
